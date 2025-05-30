@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Suivi Concessionnaires - Garantie Avantage Plus</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <style>
+    body {
+      min-height: 100vh;
+      background: #dc2626;
+      font-family: 'Inter', 'Nunito', Arial, sans-serif;
+    }
+    .table-head th {
+      background: #e5e7eb;
+      font-weight: 700;
+      font-size: 1rem;
+      color: #22223b;
+      border-bottom: 2px solid #e5e7eb;
+      text-align: left;
+      white-space: nowrap;
+    }
+    .shadow-card {
+      box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.13);
+    }
+    td, th {
+      white-space: nowrap;
+      vertical-align: middle !important;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      min-width: 44px;
+      min-height: 36px;
+      padding: 0 10px;
+      font-size: 1rem;
+      font-weight: 700;
+      border-radius: 16px;
+      border: 2px solid transparent;
+      background: #eee;
+      transition: box-shadow .13s;
+      cursor: pointer;
+      justify-content: center;
+      position: relative;
+      line-height: 1.1rem;
+      user-select: none;
+    }
+    .chip-green {
+      background: #d1fae5 !important;
+      color: #047857 !important;
+      border-color: #bbf7d0 !important;
+    }
+    .chip-yellow {
+      background: #fef9c3 !important;
+      color: #a16207 !important;
+      border-color: #fde68a !important;
+    }
+    .chip-red {
+      background: #fecaca !important;
+      color: #be123c !important;
+      border-color: #fca5a5 !important;
+    }
+    .chip-gray {
+      background: #f3f4f6 !important;
+      color: #374151 !important;
+      border-color: #e5e7eb !important;
+    }
+    .chip input[type=number], .chip input[type=text] {
+      background: transparent;
+      border: none;
+      outline: none;
+      font-weight: 700;
+      font-size: 1rem;
+      width: 55px;
+      color: inherit;
+      text-align: right;
+      padding-right: 0.3em;
+      height: 24px;
+    }
+    .chip input[type=number]::-webkit-inner-spin-button, 
+    .chip input[type=number]::-webkit-outer-spin-button { 
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    .chip input[type=number] {
+      -moz-appearance: textfield;
+    }
+    .chip .chip-symbol {
+      margin-left: 3px;
+      font-weight: 600;
+      font-size: 0.98em;
+      color: inherit;
+    }
+    .dealerCell input[type=text] {
+      width: 170px !important;
+      min-width: 100px;
+      max-width: 240px;
+      height: 36px !important;
+      min-height: 36px !important;
+      font-weight: bold;
+    }
+    .visits-row2 {
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 4px;
+      align-items: center;
+      margin-top: 2px;
+      min-height: 32px;
+    }
+    .visits-btns {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 2px;
+    }
+    .sinceTd {
+      width: 55px !important;
+      min-width: 40px !important;
+      max-width: 65px !important;
+    }
+  </style>
+</head>
+<body class="flex flex-col items-center py-8">
+  <h1 class="text-4xl font-extrabold text-white mb-8 mt-2 drop-shadow">Suivi Concessionnaires</h1>
+  
+  <div class="flex flex-row items-center justify-between mb-6 w-full max-w-6xl gap-3">
+    <input id="searchInput" type="text" placeholder="Rechercher un concessionnaire..." class="flex-1 px-5 py-3 rounded-xl shadow border border-gray-300 text-base focus:outline-none focus:border-blue-500 transition-all bg-white" />
+    <button id="addRow" class="bg-green-600 text-white px-5 py-2 rounded-xl shadow hover:bg-green-700 transition font-semibold">+ Ajouter</button>
+    <button id="exportExcel" class="bg-blue-600 text-white px-5 py-2 rounded-xl shadow hover:bg-blue-700 transition font-semibold">Exporter Excel</button>
+  </div>
+
+  <div class="bg-white rounded-2xl shadow-card p-3 md:p-6 w-full max-w-6xl" style="overflow-x:auto;">
+    <table class="min-w-full text-sm" id="dealersTable">
+      <thead>
+        <tr class="table-head align-middle">
+          <th class="px-2 py-3 w-1">Claim %</th>
+          <th class="px-3 py-3 w-48">Concessionnaire</th>
+          <th class="px-2 py-3 text-right w-32">Revenu mensuel ($)</th>
+          <th class="px-2 py-3 text-center w-72">Visites</th>
+          <th class="px-2 py-3 text-center sinceTd">Jours<br>depuis visite</th>
+          <th class="px-2 py-3 text-center w-32">Action</th>
+        </tr>
+      </thead>
+      <tbody id="dealersTbody" class="bg-white">
+        <!-- Lignes JS -->
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Modal Date Picker -->
+  <div id="modal-bg" class="hidden fixed top-0 left-0 w-full h-full bg-black bg-opacity-50 z-40 flex items-center justify-center">
+    <div class="bg-white rounded-2xl shadow-xl p-8 flex flex-col gap-4 w-80">
+      <h2 class="font-bold text-xl mb-2">Ajouter une visite</h2>
+      <input type="date" id="manualDateInput" class="border px-3 py-2 rounded-xl text-lg" />
+      <div class="flex justify-end gap-3">
+        <button id="modalCancel" class="px-4 py-2 rounded-xl bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold">Annuler</button>
+        <button id="modalOk" class="px-4 py-2 rounded-xl bg-green-600 hover:bg-green-700 text-white font-semibold">Ajouter</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ----------- UTILITAIRES -----------
+
+    function loadDealers() {
+      const data = localStorage.getItem('gap_dealers');
+      return data ? JSON.parse(data) : [];
+    }
+    function saveDealers(data) {
+      localStorage.setItem('gap_dealers', JSON.stringify(data));
+    }
+    function formatDate(dateStr) {
+      if (!dateStr) return '';
+      const d = new Date(dateStr);
+      if (isNaN(d)) return '';
+      return d.toLocaleDateString('fr-CA');
+    }
+    function daysSinceLastVisit(visits) {
+      if (!visits || visits.length === 0) return '-';
+      const last = new Date(visits[visits.length - 1]);
+      const now = new Date();
+      const diff = Math.floor((now - last) / (1000 * 60 * 60 * 24));
+      return diff >= 0 ? diff : '-';
+    }
+    function sortDealersDesc(dealers) {
+      return dealers.slice().sort((a, b) => (b.amount || 0) - (a.amount || 0));
+    }
+    function createDealer() {
+      return {
+        id: Date.now().toString() + Math.random().toString(36).slice(2),
+        claimRate: "",
+        name: '',
+        amount: 0,
+        visits: []
+      };
+    }
+    // ----------- RECHERCHE -----------
+    let searchTerm = '';
+    document.getElementById('searchInput').addEventListener('input', function(e) {
+      searchTerm = e.target.value.trim().toLowerCase();
+      renderTable();
+    });
+
+    // ----------- RENDU DU TABLEAU -----------
+    function getClaimColor(val) {
+      if (isNaN(val)) return "chip-gray";
+      if (val < 30) return "chip-green";
+      if (val <= 40) return "chip-yellow";
+      return "chip-red";
+    }
+    function renderTable() {
+      const tbody = document.getElementById('dealersTbody');
+      tbody.innerHTML = '';
+      let dealers = loadDealers();
+      dealers = sortDealersDesc(dealers);
+
+      if (searchTerm) {
+        dealers = dealers.filter(dealer =>
+          (dealer.name || '').toLowerCase().includes(searchTerm)
+        );
+      }
+
+      dealers.forEach((dealer) => {
+        const row = document.createElement('tr');
+        row.className = 'border-b hover:bg-gray-50 transition-all align-middle';
+
+        // --- Claim % chip, double-clic éditable ---
+        const claimTd = document.createElement('td');
+        claimTd.className = 'px-2 py-2 text-center align-middle';
+        let claimEditing = false;
+        let claimVal = parseFloat(dealer.claimRate);
+
+        function renderClaimChip() {
+          claimTd.innerHTML = '';
+          const chip = document.createElement('span');
+          chip.className = `chip ${getClaimColor(claimVal)}`;
+          if (!claimEditing) {
+            chip.innerHTML = (!isNaN(claimVal) ? claimVal : '') + '<span class="chip-symbol">%</span>';
+            chip.title = "Double-cliquez pour modifier";
+            chip.ondblclick = function () {
+              claimEditing = true;
+              renderClaimChip();
+            };
+          } else {
+            chip.innerHTML = `<input type="number" min="0" max="100" step="0.1" value="${!isNaN(claimVal) ? claimVal : ''}"> <span class="chip-symbol">%</span>`;
+            const input = chip.querySelector('input');
+            setTimeout(() => input && input.focus(), 30);
+            input.onblur = input.onchange = input.onkeydown = function (e) {
+              if (e.type === "keydown" && e.key !== "Enter") return;
+              let val = parseFloat(input.value);
+              dealer.claimRate = (isNaN(val) ? "" : val);
+              saveDealers(loadDealers());
+              claimEditing = false;
+              renderTable();
+            };
+          }
+          claimTd.appendChild(chip);
+        }
+        renderClaimChip();
+
+        // --- Concessionnaire (input classique) ---
+        const nameTd = document.createElement('td');
+        nameTd.className = 'px-3 py-2 align-middle font-semibold nowrap dealerCell';
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.value = dealer.name || '';
+        nameInput.className = 'bg-gray-100 rounded-xl px-2 py-1 font-semibold h-9';
+        nameInput.onchange = (e) => {
+          let allDealers = loadDealers();
+          let thisDealer = allDealers.find(d => d.id === dealer.id);
+          if (!thisDealer) return;
+          thisDealer.name = e.target.value.trim();
+          saveDealers(allDealers);
+          renderTable();
+        };
+        nameTd.appendChild(nameInput);
+
+        // --- Revenu mensuel ($) chip, double-clic éditable ---
+        const amountTd = document.createElement('td');
+        amountTd.className = 'px-2 py-2 text-right align-middle nowrap relative';
+        let amountEditing = false;
+        function renderAmountChip() {
+          amountTd.innerHTML = '';
+          const chip = document.createElement('span');
+          chip.className = 'chip chip-gray';
+          if (!amountEditing) {
+            chip.innerHTML = (dealer.amount ? dealer.amount : '') + '<span class="chip-symbol">$</span>';
+            chip.title = "Double-cliquez pour modifier";
+            chip.ondblclick = function () {
+              amountEditing = true;
+              renderAmountChip();
+            };
+          } else {
+            chip.innerHTML = `<input type="number" min="0" value="${dealer.amount ? dealer.amount : ''}"><span class="chip-symbol">$</span>`;
+            const input = chip.querySelector('input');
+            setTimeout(() => input && input.focus(), 30);
+            input.onblur = input.onchange = input.onkeydown = function (e) {
+              if (e.type === "keydown" && e.key !== "Enter") return;
+              let val = parseFloat(input.value);
+              dealer.amount = isNaN(val) ? '' : val;
+              saveDealers(loadDealers());
+              amountEditing = false;
+              renderTable();
+            };
+          }
+          amountTd.appendChild(chip);
+        }
+        renderAmountChip();
+
+        // VISITES (boutons ligne 1, visites + bouton autres sur ligne 2)
+        const visitsTd = document.createElement('td');
+        visitsTd.className = 'px-2 py-2 align-middle relative';
+        const btnGroup = document.createElement('div');
+        btnGroup.className = 'visits-btns';
+        const visitNowBtn = document.createElement('button');
+        visitNowBtn.className = 'bg-green-600 text-white px-2 py-1 rounded-lg shadow hover:bg-green-700 text-xs font-semibold';
+        visitNowBtn.textContent = '+ Aujourd\'hui';
+        visitNowBtn.onclick = () => {
+          let allDealers = loadDealers();
+          let thisDealer = allDealers.find(d => d.id === dealer.id);
+          if (!thisDealer) return;
+          const today = new Date().toISOString().split('T')[0];
+          thisDealer.visits = thisDealer.visits || [];
+          thisDealer.visits.push(today);
+          saveDealers(allDealers);
+          renderTable();
+        };
+        btnGroup.appendChild(visitNowBtn);
+
+        const visitManualBtn = document.createElement('button');
+        visitManualBtn.className = 'bg-blue-600 text-white px-2 py-1 rounded-lg shadow hover:bg-blue-700 text-xs font-semibold';
+        visitManualBtn.textContent = '+ Date manuelle';
+        visitManualBtn.onclick = () => showDateModal(dealer.id);
+        btnGroup.appendChild(visitManualBtn);
+
+        visitsTd.appendChild(btnGroup);
+
+        // Ligne 2 : visites (chips) + bouton autres
+        const visitsRow2 = document.createElement('div');
+        visitsRow2.className = 'visits-row2';
+        const totalVisits = dealer.visits ? dealer.visits.length : 0;
+        if (totalVisits > 0) {
+          const lastTwo = dealer.visits.slice(-2);
+          lastTwo.forEach((v, vIdx) => {
+            const actualIdx = totalVisits - 2 + vIdx;
+            const chip = document.createElement('div');
+            chip.className = 'bg-gray-200 rounded-full px-3 py-1 flex items-center gap-2 text-xs';
+            chip.textContent = formatDate(v);
+            const del = document.createElement('button');
+            del.textContent = '×';
+            del.title = 'Supprimer cette visite';
+            del.className = 'ml-2 text-red-600 hover:text-red-900 font-bold';
+            del.onclick = () => {
+              let allDealers = loadDealers();
+              let thisDealer = allDealers.find(d => d.id === dealer.id);
+              if (!thisDealer) return;
+              thisDealer.visits.splice(actualIdx, 1);
+              saveDealers(allDealers);
+              renderTable();
+            };
+            chip.appendChild(del);
+            visitsRow2.appendChild(chip);
+          });
+          if (totalVisits > 2) {
+            const moreBtn = document.createElement('button');
+            moreBtn.className = 'bg-gray-300 rounded-full px-3 py-1 text-xs font-semibold hover:bg-gray-400 relative';
+            moreBtn.textContent = `+${totalVisits - 2} autres`;
+            moreBtn.onclick = (e) => {
+              e.stopPropagation();
+              let dropdown = visitsTd.querySelector('.dropdown-visits');
+              if (dropdown) {
+                dropdown.remove();
+                return;
+              }
+              dropdown = document.createElement('div');
+              dropdown.className = 'dropdown-visits absolute z-50 mt-2 bg-white shadow-xl rounded-xl p-3 border flex flex-col gap-2';
+              dropdown.style.minWidth = '180px';
+              dropdown.style.right = '0';
+              dealer.visits.slice(0, -2).forEach((v, vIdx) => {
+                const oldChip = document.createElement('div');
+                oldChip.className = 'bg-gray-100 rounded-full px-3 py-1 flex items-center gap-2 text-xs';
+                oldChip.textContent = formatDate(v);
+                const delOld = document.createElement('button');
+                delOld.textContent = '×';
+                delOld.title = 'Supprimer cette visite';
+                delOld.className = 'ml-2 text-red-600 hover:text-red-900 font-bold';
+                delOld.onclick = () => {
+                  let allDealers = loadDealers();
+                  let thisDealer = allDealers.find(d => d.id === dealer.id);
+                  if (!thisDealer) return;
+                  thisDealer.visits.splice(vIdx, 1);
+                  saveDealers(allDealers);
+                  renderTable();
+                };
+                oldChip.appendChild(delOld);
+                dropdown.appendChild(oldChip);
+              });
+              document.body.addEventListener('click', function closeDropdown(ev) {
+                if (!dropdown.contains(ev.target) && ev.target !== moreBtn) {
+                  dropdown.remove();
+                  document.body.removeEventListener('click', closeDropdown);
+                }
+              });
+              moreBtn.parentNode.appendChild(dropdown);
+            };
+            visitsRow2.appendChild(moreBtn);
+            visitsTd.classList.add('relative');
+          }
+        } else {
+          visitsRow2.innerHTML = '<span class="text-gray-400 italic text-xs">Aucune visite enregistrée</span>';
+        }
+        visitsTd.appendChild(visitsRow2);
+
+        // Jours depuis dernière visite
+        const sinceTd = document.createElement('td');
+        sinceTd.className = 'px-2 py-2 text-center align-middle font-mono font-semibold nowrap sinceTd';
+        const days = daysSinceLastVisit(dealer.visits);
+        sinceTd.textContent = days;
+        sinceTd.classList.remove('bg-green-100', 'text-green-800', 'border-green-200',
+                                'bg-yellow-100', 'text-yellow-800', 'border-yellow-200',
+                                'bg-red-100', 'text-red-800', 'border-red-200',
+                                'bg-gray-100', 'text-gray-800', 'border-gray-200', 'rounded-xl');
+        if (days !== '-' && !isNaN(days)) {
+          sinceTd.classList.add('rounded-xl', 'border');
+          if (days <= 30) {
+            sinceTd.classList.add('bg-green-100', 'text-green-800', 'border-green-200');
+          } else if (days <= 60) {
+            sinceTd.classList.add('bg-yellow-100', 'text-yellow-800', 'border-yellow-200');
+          } else {
+            sinceTd.classList.add('bg-red-100', 'text-red-800', 'border-red-200');
+          }
+        }
+
+        // Action
+        const actionTd = document.createElement('td');
+        actionTd.className = 'px-2 py-2 text-center align-middle nowrap';
+        const delBtn = document.createElement('button');
+        delBtn.className = 'bg-red-500 text-white px-4 py-1 rounded-xl shadow hover:bg-red-700 text-xs font-bold';
+        delBtn.textContent = 'Supprimer';
+        delBtn.onclick = () => {
+          if (confirm('Supprimer ce concessionnaire ?')) {
+            let allDealers = loadDealers();
+            allDealers = allDealers.filter(d => d.id !== dealer.id);
+            saveDealers(allDealers);
+            renderTable();
+          }
+        };
+        actionTd.appendChild(delBtn);
+
+        // Append all to row
+        row.appendChild(claimTd);
+        row.appendChild(nameTd);
+        row.appendChild(amountTd);
+        row.appendChild(visitsTd);
+        row.appendChild(sinceTd);
+        row.appendChild(actionTd);
+        tbody.appendChild(row);
+      });
+    }
+
+    // ----------- MODAL POUR DATE MANUELLE -----------
+    let currentModalId = null;
+    function showDateModal(dealerId) {
+      currentModalId = dealerId;
+      document.getElementById('manualDateInput').value = '';
+      document.getElementById('modal-bg').classList.remove('hidden');
+      document.getElementById('manualDateInput').focus();
+    }
+    document.getElementById('modalCancel').onclick = function() {
+      document.getElementById('modal-bg').classList.add('hidden');
+      currentModalId = null;
+    };
+    document.getElementById('modalOk').onclick = function() {
+      const dateStr = document.getElementById('manualDateInput').value;
+      if (dateStr && currentModalId) {
+        let allDealers = loadDealers();
+        let thisDealer = allDealers.find(d => d.id === currentModalId);
+        if (thisDealer) {
+          thisDealer.visits = thisDealer.visits || [];
+          thisDealer.visits.push(dateStr);
+          saveDealers(allDealers);
+          renderTable();
+        }
+        document.getElementById('modal-bg').classList.add('hidden');
+        currentModalId = null;
+      }
+    };
+    // ----------- ACTIONS TABLEAU -----------
+    document.getElementById('addRow').onclick = function() {
+      let dealers = loadDealers();
+      dealers.push(createDealer());
+      saveDealers(dealers);
+      renderTable();
+    };
+    document.getElementById('exportExcel').onclick = function() {
+      let dealers = sortDealersDesc(loadDealers());
+      const ws_data = [
+        ['Claim %', 'Concessionnaire', 'Revenu mensuel', 'Dates de visites', 'Jours depuis dernière visite']
+      ];
+      dealers.forEach(dealer => {
+        ws_data.push([
+          dealer.claimRate || '',
+          dealer.name || '',
+          dealer.amount || 0,
+          (dealer.visits || []).map(formatDate).join(', '),
+          daysSinceLastVisit(dealer.visits)
+        ]);
+      });
+      const ws = XLSX.utils.aoa_to_sheet(ws_data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Concessionnaires');
+      XLSX.writeFile(wb, 'suivi_concessionnaires.xlsx');
+    };
+    window.onload = function() {
+      renderTable();
+    };
+  </script>
+</body>
+</html>
