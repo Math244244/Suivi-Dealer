@@ -20,6 +20,7 @@
       border-bottom: 2px solid #e5e7eb;
       text-align: left;
       white-space: nowrap;
+      vertical-align: middle !important;
     }
     .shadow-card {
       box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.13);
@@ -45,6 +46,10 @@
       position: relative;
       line-height: 1.1rem;
       user-select: none;
+      outline: none;
+    }
+    .chip:focus {
+      box-shadow: 0 0 0 2px #1d4ed8;
     }
     .chip-green {
       background: #d1fae5 !important;
@@ -114,9 +119,20 @@
       margin-bottom: 2px;
     }
     .sinceTd {
-      width: 55px !important;
-      min-width: 40px !important;
-      max-width: 65px !important;
+      width: 70px !important;
+      min-width: 56px !important;
+      max-width: 80px !important;
+    }
+    .actionTd {
+      width: 110px !important;
+      min-width: 90px !important;
+      max-width: 150px !important;
+      text-align: center !important;
+      vertical-align: middle !important;
+    }
+    @media (max-width: 1024px) {
+      .sinceTd, .actionTd { font-size: 0.95em;}
+      .dealerCell input[type=text] { width: 120px !important; }
     }
   </style>
 </head>
@@ -138,7 +154,7 @@
           <th class="px-2 py-3 text-right w-32">Revenu mensuel ($)</th>
           <th class="px-2 py-3 text-center w-72">Visites</th>
           <th class="px-2 py-3 text-center sinceTd">Jours<br>depuis visite</th>
-          <th class="px-2 py-3 text-center w-32">Action</th>
+          <th class="px-2 py-3 text-center actionTd"><span style="display:inline-block;width:85px;">Action</span></th>
         </tr>
       </thead>
       <tbody id="dealersTbody" class="bg-white">
@@ -161,7 +177,6 @@
 
   <script>
     // ----------- UTILITAIRES -----------
-
     function loadDealers() {
       const data = localStorage.getItem('gap_dealers');
       return data ? JSON.parse(data) : [];
@@ -190,69 +205,96 @@
         id: Date.now().toString() + Math.random().toString(36).slice(2),
         claimRate: "",
         name: '',
-        amount: 0,
+        amount: "",
         visits: []
       };
     }
-    // ----------- RECHERCHE -----------
+
     let searchTerm = '';
     document.getElementById('searchInput').addEventListener('input', function(e) {
       searchTerm = e.target.value.trim().toLowerCase();
       renderTable();
     });
 
-    // ----------- RENDU DU TABLEAU -----------
     function getClaimColor(val) {
-      if (isNaN(val)) return "chip-gray";
+      if (isNaN(val) || val === "") return "chip-gray";
       if (val < 30) return "chip-green";
       if (val <= 40) return "chip-yellow";
       return "chip-red";
     }
+
     function renderTable() {
       const tbody = document.getElementById('dealersTbody');
       tbody.innerHTML = '';
       let dealers = loadDealers();
       dealers = sortDealersDesc(dealers);
-
       if (searchTerm) {
         dealers = dealers.filter(dealer =>
           (dealer.name || '').toLowerCase().includes(searchTerm)
         );
       }
-
-      dealers.forEach((dealer) => {
+      dealers.forEach((dealer, rowIdx) => {
         const row = document.createElement('tr');
         row.className = 'border-b hover:bg-gray-50 transition-all align-middle';
 
-        // --- Claim % chip, double-clic éditable ---
+        // --- Claim % chip, tab focus, entrée pour éditer, tab pour valider ---
         const claimTd = document.createElement('td');
         claimTd.className = 'px-2 py-2 text-center align-middle';
         let claimEditing = false;
-        let claimVal = parseFloat(dealer.claimRate);
-
+        let claimVal = (dealer.claimRate !== undefined && dealer.claimRate !== null && dealer.claimRate !== "") ? parseFloat(dealer.claimRate) : "";
         function renderClaimChip() {
           claimTd.innerHTML = '';
           const chip = document.createElement('span');
           chip.className = `chip ${getClaimColor(claimVal)}`;
+          chip.tabIndex = 0;
+          chip.setAttribute("aria-label", "Taux de Claim en % (éditer)");
           if (!claimEditing) {
-            chip.innerHTML = (!isNaN(claimVal) ? claimVal : '') + '<span class="chip-symbol">%</span>';
-            chip.title = "Double-cliquez pour modifier";
-            chip.ondblclick = function () {
-              claimEditing = true;
-              renderClaimChip();
+            chip.innerHTML = (claimVal !== "" && !isNaN(claimVal) ? claimVal : "") + '<span class="chip-symbol">%</span>';
+            chip.title = "Entrée/Espace ou double-clic pour modifier";
+            chip.ondblclick = () => { claimEditing = true; renderClaimChip(); };
+            chip.onkeydown = function (e) {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                claimEditing = true;
+                renderClaimChip();
+              }
             };
           } else {
-            chip.innerHTML = `<input type="number" min="0" max="100" step="0.1" value="${!isNaN(claimVal) ? claimVal : ''}"> <span class="chip-symbol">%</span>`;
+            chip.innerHTML = `<input type="number" min="0" max="100" step="0.1" value="${(claimVal !== "" && !isNaN(claimVal)) ? claimVal : ""}"> <span class="chip-symbol">%</span>`;
             const input = chip.querySelector('input');
             setTimeout(() => input && input.focus(), 30);
-            input.onblur = input.onchange = input.onkeydown = function (e) {
-              if (e.type === "keydown" && e.key !== "Enter") return;
+            setTimeout(() => { if (input) input.select(); }, 50);
+            input.onblur = function (e) { endEditClaim(); };
+            input.onkeydown = function (e) {
+              if (e.key === "Enter" || e.key === "Tab") {
+                endEditClaim();
+                if (e.key === "Tab") {
+                  let next = claimTd.nextSibling.querySelector('input');
+                  if (next) next.focus();
+                  e.preventDefault();
+                }
+              } else if (e.key === "Escape") {
+                claimEditing = false;
+                renderClaimChip();
+                chip.focus();
+              }
+            };
+            function endEditClaim() {
               let val = parseFloat(input.value);
-              dealer.claimRate = (isNaN(val) ? "" : val);
-              saveDealers(loadDealers());
+              let allDealers = loadDealers();
+              let thisDealer = allDealers.find(d => d.id === dealer.id);
+              if (thisDealer) {
+                thisDealer.claimRate = (isNaN(val) ? "" : val);
+                saveDealers(allDealers);
+              }
               claimEditing = false;
               renderTable();
-            };
+              let currentRow = tbody.children[rowIdx];
+              if (currentRow) {
+                let nextInput = currentRow.querySelector('input[type=text]');
+                if (nextInput) nextInput.focus();
+              }
+            }
           }
           claimTd.appendChild(chip);
         }
@@ -265,6 +307,19 @@
         nameInput.type = 'text';
         nameInput.value = dealer.name || '';
         nameInput.className = 'bg-gray-100 rounded-xl px-2 py-1 font-semibold h-9';
+        nameInput.tabIndex = 0;
+        nameInput.onkeydown = function (e) {
+          if (e.key === "Tab" && !e.shiftKey) {
+            e.preventDefault();
+            let next = nameTd.nextSibling.querySelector('.chip');
+            if (next) next.focus();
+          }
+          if (e.key === "Tab" && e.shiftKey) {
+            e.preventDefault();
+            let prev = nameTd.previousSibling.querySelector('.chip');
+            if (prev) prev.focus();
+          }
+        };
         nameInput.onchange = (e) => {
           let allDealers = loadDealers();
           let thisDealer = allDealers.find(d => d.id === dealer.id);
@@ -275,39 +330,75 @@
         };
         nameTd.appendChild(nameInput);
 
-        // --- Revenu mensuel ($) chip, double-clic éditable ---
+        // --- Revenu mensuel ($) chip, tab focus, entrée pour éditer, tab pour valider ---
         const amountTd = document.createElement('td');
         amountTd.className = 'px-2 py-2 text-right align-middle nowrap relative';
         let amountEditing = false;
+        let amountVal = (dealer.amount !== undefined && dealer.amount !== null && dealer.amount !== "") ? dealer.amount : "";
         function renderAmountChip() {
           amountTd.innerHTML = '';
           const chip = document.createElement('span');
           chip.className = 'chip chip-gray';
+          chip.tabIndex = 0;
+          chip.setAttribute("aria-label", "Revenu mensuel en $ (éditer)");
           if (!amountEditing) {
-            chip.innerHTML = (dealer.amount ? dealer.amount : '') + '<span class="chip-symbol">$</span>';
-            chip.title = "Double-cliquez pour modifier";
-            chip.ondblclick = function () {
-              amountEditing = true;
-              renderAmountChip();
+            chip.innerHTML = (amountVal !== "" ? amountVal : "") + '<span class="chip-symbol">$</span>';
+            chip.title = "Entrée/Espace ou double-clic pour modifier";
+            chip.ondblclick = function () { amountEditing = true; renderAmountChip(); };
+            chip.onkeydown = function (e) {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                amountEditing = true;
+                renderAmountChip();
+              }
+              if (e.key === "Tab" && !e.shiftKey) {
+                e.preventDefault();
+                let nextBtns = amountTd.nextSibling.querySelector('button');
+                if (nextBtns) nextBtns.focus();
+              }
+              if (e.key === "Tab" && e.shiftKey) {
+                e.preventDefault();
+                let prev = amountTd.previousSibling.querySelector('input[type=text]');
+                if (prev) prev.focus();
+              }
             };
           } else {
-            chip.innerHTML = `<input type="number" min="0" value="${dealer.amount ? dealer.amount : ''}"><span class="chip-symbol">$</span>`;
+            chip.innerHTML = `<input type="number" min="0" value="${(amountVal !== "" ? amountVal : "")}"><span class="chip-symbol">$</span>`;
             const input = chip.querySelector('input');
             setTimeout(() => input && input.focus(), 30);
-            input.onblur = input.onchange = input.onkeydown = function (e) {
-              if (e.type === "keydown" && e.key !== "Enter") return;
+            setTimeout(() => { if (input) input.select(); }, 50);
+            input.onblur = function (e) { endEditAmount(); };
+            input.onkeydown = function (e) {
+              if (e.key === "Enter" || e.key === "Tab") {
+                endEditAmount();
+                if (e.key === "Tab") {
+                  let nextBtns = amountTd.nextSibling.querySelector('button');
+                  if (nextBtns) nextBtns.focus();
+                  e.preventDefault();
+                }
+              } else if (e.key === "Escape") {
+                amountEditing = false;
+                renderAmountChip();
+                chip.focus();
+              }
+            };
+            function endEditAmount() {
               let val = parseFloat(input.value);
-              dealer.amount = isNaN(val) ? '' : val;
-              saveDealers(loadDealers());
+              let allDealers = loadDealers();
+              let thisDealer = allDealers.find(d => d.id === dealer.id);
+              if (thisDealer) {
+                thisDealer.amount = isNaN(val) ? "" : val;
+                saveDealers(allDealers);
+              }
               amountEditing = false;
               renderTable();
-            };
+            }
           }
           amountTd.appendChild(chip);
         }
         renderAmountChip();
 
-        // VISITES (boutons ligne 1, visites + bouton autres sur ligne 2)
+        // VISITES
         const visitsTd = document.createElement('td');
         visitsTd.className = 'px-2 py-2 align-middle relative';
         const btnGroup = document.createElement('div');
@@ -315,6 +406,7 @@
         const visitNowBtn = document.createElement('button');
         visitNowBtn.className = 'bg-green-600 text-white px-2 py-1 rounded-lg shadow hover:bg-green-700 text-xs font-semibold';
         visitNowBtn.textContent = '+ Aujourd\'hui';
+        visitNowBtn.tabIndex = 0;
         visitNowBtn.onclick = () => {
           let allDealers = loadDealers();
           let thisDealer = allDealers.find(d => d.id === dealer.id);
@@ -330,6 +422,7 @@
         const visitManualBtn = document.createElement('button');
         visitManualBtn.className = 'bg-blue-600 text-white px-2 py-1 rounded-lg shadow hover:bg-blue-700 text-xs font-semibold';
         visitManualBtn.textContent = '+ Date manuelle';
+        visitManualBtn.tabIndex = 0;
         visitManualBtn.onclick = () => showDateModal(dealer.id);
         btnGroup.appendChild(visitManualBtn);
 
@@ -433,7 +526,7 @@
 
         // Action
         const actionTd = document.createElement('td');
-        actionTd.className = 'px-2 py-2 text-center align-middle nowrap';
+        actionTd.className = 'px-2 py-2 text-center align-middle nowrap actionTd';
         const delBtn = document.createElement('button');
         delBtn.className = 'bg-red-500 text-white px-4 py-1 rounded-xl shadow hover:bg-red-700 text-xs font-bold';
         delBtn.textContent = 'Supprimer';
@@ -447,7 +540,7 @@
         };
         actionTd.appendChild(delBtn);
 
-        // Append all to row
+        // Ajout des cellules à la ligne
         row.appendChild(claimTd);
         row.appendChild(nameTd);
         row.appendChild(amountTd);
@@ -491,6 +584,15 @@
       dealers.push(createDealer());
       saveDealers(dealers);
       renderTable();
+      // Mettre le focus direct sur la première case Claim %
+      setTimeout(() => {
+        const tbody = document.getElementById('dealersTbody');
+        const lastRow = tbody.lastChild;
+        if (lastRow) {
+          let chip = lastRow.querySelector('.chip');
+          if (chip) chip.focus();
+        }
+      }, 80);
     };
     document.getElementById('exportExcel').onclick = function() {
       let dealers = sortDealersDesc(loadDealers());
